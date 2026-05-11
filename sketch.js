@@ -38,14 +38,9 @@ const CLIENT_SEED = [
 let clients = [];
 let layoutPoints = {};
 let stage = 0;
-let stageStart = 0;
-let playing = false;
-let paused = false;
 let riskBaseline = 0.0553;
 let usageRate = 0.75;
 let canvas;
-
-const stageDurations = [140, 150, 160, 180, 170, 220];
 
 function setup() {
   const holder = document.getElementById("sketch-holder");
@@ -58,12 +53,18 @@ function setup() {
 
 function draw() {
   background(CANVAS_BG);
-  updateAnimation();
   drawFrame();
   drawPipeline();
-  drawPortfolioPanel();
+  drawStageVisuals();
   drawClients();
+  // drawPortfolioPanel();
   drawStageNotes();
+
+  // Animar posicoes dos clientes suavemente
+  clients.forEach((client) => {
+    client.x = lerp(client.x, client.tx, 0.08);
+    client.y = lerp(client.y, client.ty, 0.08);
+  });
 }
 
 function windowResized() {
@@ -74,31 +75,31 @@ function windowResized() {
 }
 
 function wireControls() {
-  const runButton = document.getElementById("run-button");
-  const pauseButton = document.getElementById("pause-button");
+  const prevButton = document.getElementById("prev-button");
+  const nextButton = document.getElementById("next-button");
   const resetButton = document.getElementById("reset-button");
   const riskSlider = document.getElementById("risk-slider");
   const usageSlider = document.getElementById("usage-slider");
 
-  runButton.addEventListener("click", () => {
-    if (!playing || stage === STAGE_LABELS.length - 1) {
-      rebuildSimulation();
+  prevButton.addEventListener("click", () => {
+    if (stage > 0) {
+      stage -= 1;
+      setClientTargets();
+      updateDomStatus();
     }
-    playing = true;
-    paused = false;
   });
 
-  pauseButton.addEventListener("click", () => {
-    if (!playing) return;
-    paused = !paused;
-    pauseButton.textContent = paused ? "Continuar" : "Pausar";
+  nextButton.addEventListener("click", () => {
+    if (stage < STAGE_LABELS.length - 1) {
+      stage += 1;
+      setClientTargets();
+      updateDomStatus();
+    }
   });
 
   resetButton.addEventListener("click", () => {
+    stage = 0;
     rebuildSimulation();
-    playing = false;
-    paused = false;
-    pauseButton.textContent = "Pausar";
   });
 
   riskSlider.addEventListener("input", (event) => {
@@ -117,7 +118,6 @@ function wireControls() {
 function rebuildSimulation(resetStage = true) {
   if (resetStage) {
     stage = 0;
-    stageStart = frameCount;
   }
   buildLayout();
   clients = CLIENT_SEED.map((client, index) => makeClient(client, index));
@@ -128,7 +128,7 @@ function rebuildSimulation(resetStage = true) {
 
 function buildLayout() {
   const top = 78;
-  const flowY = height * 0.46;
+  const flowY = height * 0.44;
   const usableWidth = width - 76;
   const left = 38;
   const columns = [0.05, 0.22, 0.39, 0.57, 0.74, 0.91].map((ratio) => left + usableWidth * ratio);
@@ -188,44 +188,89 @@ function getFinancialDefault() {
 }
 
 function setClientTargets() {
-  clients.forEach((client, index) => {
-    const lane = index % 7;
+  const eligibleOnly = clients.filter((c) => c.eligible);
+  const ineligibleOnly = clients.filter((c) => !c.eligible);
+
+  clients.forEach((client) => {
+    const lane = client.index % 7;
     const laneOffset = map(lane, 0, 6, -86, 86);
     const riskLane = getRiskLane(client.pd);
-    const resultLane = index % 6;
+    const eligibleIndex = eligibleOnly.indexOf(client);
+    const ineligibleIndex = ineligibleOnly.indexOf(client);
 
-    const targets = [
-      { x: layoutPoints.stageX[0], y: layoutPoints.flowY + laneOffset },
-      {
+    const targets = [];
+
+    // Etapa 0 — Entrada: clientes chegam pela esquerda
+    targets.push({
+      x: layoutPoints.stageX[0],
+      y: layoutPoints.flowY + laneOffset,
+    });
+
+    // Etapa 1 — Filtro: elegiveis no centro, inelegiveis descem
+    if (client.eligible) {
+      targets.push({
         x: layoutPoints.stageX[1],
-        y: client.eligible ? layoutPoints.flowY + laneOffset * 0.8 : layoutPoints.flowY + 132,
-      },
-      { x: layoutPoints.stageX[2], y: layoutPoints.flowY - 104 + riskLane * 52 },
-      { x: layoutPoints.stageX[3], y: layoutPoints.flowY + sin(index) * 96 },
-      { x: layoutPoints.stageX[4], y: layoutPoints.flowY - 88 + resultLane * 34 },
-      { x: layoutPoints.stageX[5], y: layoutPoints.flowY - 86 + resultLane * 34 },
-    ];
+        y: layoutPoints.flowY + laneOffset * 0.7,
+      });
+    } else {
+      targets.push({
+        x: layoutPoints.stageX[1],
+        y: layoutPoints.flowY + 140,
+      });
+    }
+
+    // Etapa 2 — Risco: separados por faixa de risco
+    targets.push({
+      x: layoutPoints.stageX[2],
+      y: layoutPoints.flowY - 100 + riskLane * 50,
+    });
+
+    // Etapa 3 — Otimizacao: clientes ao redor do nucleo, com espaco para o visual central
+    if (client.eligible) {
+      const angle = (eligibleIndex / max(eligibleOnly.length, 1)) * TWO_PI - HALF_PI;
+      const r = 110;
+      targets.push({
+        x: layoutPoints.stageX[3] + cos(angle) * r,
+        y: layoutPoints.flowY + sin(angle) * r * 0.7,
+      });
+    } else {
+      targets.push({
+        x: layoutPoints.stageX[3] - 80,
+        y: layoutPoints.flowY + 160,
+      });
+    }
+
+    // Etapa 4 — Restricoes: clientes ficam a esquerda das gates
+    if (client.eligible) {
+      const row = eligibleIndex % 6;
+      targets.push({
+        x: layoutPoints.stageX[4] - 80,
+        y: layoutPoints.flowY - 80 + row * 32,
+      });
+    } else {
+      targets.push({
+        x: layoutPoints.stageX[4] - 80,
+        y: layoutPoints.flowY + 160,
+      });
+    }
+
+    // Etapa 5 — Resultado: clientes ficam a esquerda dos graficos
+    if (client.eligible) {
+      const row = eligibleIndex % 6;
+      targets.push({
+        x: layoutPoints.stageX[5] - 100,
+        y: layoutPoints.flowY - 80 + row * 32,
+      });
+    } else {
+      targets.push({
+        x: layoutPoints.stageX[5] - 100,
+        y: layoutPoints.flowY + 160,
+      });
+    }
 
     client.tx = targets[stage].x;
     client.ty = targets[stage].y;
     client.targets = targets;
-  });
-}
-
-function updateAnimation() {
-  if (playing && !paused) {
-    const elapsed = frameCount - stageStart;
-    if (elapsed > stageDurations[stage] && stage < STAGE_LABELS.length - 1) {
-      stage += 1;
-      stageStart = frameCount;
-      setClientTargets();
-      updateDomStatus();
-    }
-  }
-
-  clients.forEach((client) => {
-    client.x = lerp(client.x, client.tx, 0.055);
-    client.y = lerp(client.y, client.ty, 0.055);
   });
 }
 
@@ -249,9 +294,10 @@ function drawPipeline() {
   labels.forEach((label, index) => {
     const x = layoutPoints.stageX[index];
     const active = index <= stage;
+    const current = index === stage;
     stroke(active ? PAN_BLUE : LINE);
-    strokeWeight(active ? 3 : 2);
-    fill(active ? "#e8f0ff" : "#f6f7f9");
+    strokeWeight(current ? 3.5 : active ? 2.5 : 2);
+    fill(current ? "#dbeafe" : active ? "#e8f0ff" : "#f6f7f9");
     circle(x, layoutPoints.top + 38, 46);
     noStroke();
     fill(active ? PAN_BLUE : MUTED);
@@ -264,6 +310,127 @@ function drawPipeline() {
     textSize(12);
     text(label, x, layoutPoints.top + 78);
   });
+}
+
+function drawClients() {
+  clients.forEach((client) => {
+    // Esconder inelegiveis a partir da etapa 2
+    if (!client.eligible && stage >= 2) return;
+
+    const riskColor = getRiskColor(client.pd, client.eligible);
+    const radius = map(client.cp, 1800, 7000, 11, 22);
+    const alpha = client.eligible || stage < 1 ? 255 : 115;
+    const glow = 1 + sin(frameCount * 0.07 + client.pulse) * 0.08;
+
+    noStroke();
+    fill(red(riskColor), green(riskColor), blue(riskColor), alpha * 0.16);
+    circle(client.x, client.y, radius * 3.2 * glow);
+    fill(red(riskColor), green(riskColor), blue(riskColor), alpha);
+    circle(client.x, client.y, radius * 2);
+
+    fill("#ffffff");
+    textAlign(CENTER, CENTER);
+    textStyle(BOLD);
+    textSize(10);
+    text(`${Math.round(client.pd * 100)}`, client.x, client.y);
+    textStyle(NORMAL);
+
+  });
+}
+
+function drawStageVisuals() {
+  if (stage === 3) drawOptimizationCore();
+  if (stage === 4) drawRestrictionGates();
+  if (stage === 5) drawComparisonBars();
+}
+
+function drawOptimizationCore() {
+  const x = layoutPoints.stageX[3];
+  const y = layoutPoints.flowY;
+  const pulse = 48 + sin(frameCount * 0.06) * 5;
+
+  // Fundo semi-transparente para separar do conteudo
+  noStroke();
+  fill(255, 255, 255, 180);
+  circle(x, y, pulse * 2.8);
+
+  noFill();
+  stroke(PAN_BLUE);
+  strokeWeight(2);
+  circle(x, y, pulse * 2);
+  stroke(GREEN);
+  strokeWeight(1.5);
+  arc(x, y, pulse * 2.5, pulse * 2.5, frameCount * 0.02, frameCount * 0.02 + PI * 0.85);
+  stroke(RED);
+  strokeWeight(1.5);
+  arc(x, y, pulse * 1.6, pulse * 1.6, -frameCount * 0.025, -frameCount * 0.025 + PI * 0.7);
+
+  noStroke();
+  fill(INK);
+  textAlign(CENTER, CENTER);
+  textStyle(BOLD);
+  textSize(14);
+  text("max Z", x, y - 8);
+  textStyle(NORMAL);
+  textSize(11);
+  fill(MUTED);
+  text("retorno − perda", x, y + 10);
+}
+
+function drawRestrictionGates() {
+  const x = layoutPoints.stageX[4];
+  const y = layoutPoints.flowY - 100;
+  const gates = ["R$200", "R$25k", "CP × M", "PD fin."];
+
+  gates.forEach((gate, index) => {
+    const gy = y + index * 48;
+    const isPdFin = index === 3;
+    const failing = isPdFin && getStats().financialDefault > riskBaseline;
+    stroke(failing ? RED : GREEN);
+    strokeWeight(2);
+    fill("#ffffff");
+    rect(x - 42, gy, 84, 32, 6);
+    noStroke();
+    fill(INK);
+    textAlign(CENTER, CENTER);
+    textSize(12);
+    textStyle(BOLD);
+    text(gate, x, gy + 16);
+    textStyle(NORMAL);
+
+    // Icone de status
+    const iconX = x + 52;
+    const iconY = gy + 16;
+    fill(failing ? RED : GREEN);
+    textSize(14);
+    text(failing ? "✗" : "✓", iconX, iconY);
+  });
+}
+
+function drawComparisonBars() {
+  const stats = getStats();
+  const x = layoutPoints.stageX[5] - 38;
+  const y = layoutPoints.flowY + 90;
+  const maxValue = max(stats.currentLimit, stats.optimizedLimit, 1);
+
+  drawSingleBar("Atual", x - 38, y, stats.currentLimit / maxValue, "#94a3b8");
+  drawSingleBar("Otimizado", x + 38, y, stats.optimizedLimit / maxValue, PAN_BLUE);
+}
+
+function drawSingleBar(label, x, y, ratio, colorValue) {
+  const barH = 72;
+  const h = barH * ratio;
+  noStroke();
+  fill("#e5e7eb");
+  rect(x, y - barH, 52, barH, 6);
+  fill(colorValue);
+  rect(x, y - h, 52, h, 6);
+  fill(INK);
+  textAlign(CENTER, TOP);
+  textSize(11);
+  textStyle(BOLD);
+  text(label, x + 26, y + 6);
+  textStyle(NORMAL);
 }
 
 function drawPortfolioPanel() {
@@ -299,48 +466,6 @@ function drawPortfolioPanel() {
   });
 }
 
-function drawClients() {
-  clients.forEach((client) => {
-    const riskColor = getRiskColor(client.pd, client.eligible);
-    const radius = map(client.cp, 1800, 7000, 11, 22);
-    const alpha = client.eligible || stage < 1 ? 255 : 115;
-    const glow = 1 + sin(frameCount * 0.07 + client.pulse) * 0.08;
-
-    noStroke();
-    fill(red(riskColor), green(riskColor), blue(riskColor), alpha * 0.16);
-    circle(client.x, client.y, radius * 3.2 * glow);
-    fill(red(riskColor), green(riskColor), blue(riskColor), alpha);
-    circle(client.x, client.y, radius * 2);
-
-    fill("#ffffff");
-    textAlign(CENTER, CENTER);
-    textStyle(BOLD);
-    textSize(10);
-    text(`${Math.round(client.pd * 100)}`, client.x, client.y);
-    textStyle(NORMAL);
-
-    if (stage >= 3 && client.eligible) {
-      drawLimitBar(client, radius);
-    }
-  });
-}
-
-function drawLimitBar(client, radius) {
-  const maxBar = 62;
-  const currentW = map(client.offered, 0, 7000, 2, maxBar);
-  const optW = map(client.optimized, 0, 7000, 2, maxBar);
-  const x = client.x - maxBar / 2;
-  const y = client.y + radius + 10;
-
-  noStroke();
-  fill("#e5e7eb");
-  rect(x, y, maxBar, 5, 3);
-  fill("#94a3b8");
-  rect(x, y, currentW, 5, 3);
-  fill(PAN_BLUE);
-  rect(x, y + 7, optW, 5, 3);
-}
-
 function drawStageNotes() {
   const note = getStageNote();
   const x = 42;
@@ -355,81 +480,6 @@ function drawStageNotes() {
   textStyle(NORMAL);
   textSize(13);
   text(note, x, y + 20, min(520, width - 84));
-
-  if (stage === 3) {
-    drawOptimizationCore();
-  }
-  if (stage === 4) {
-    drawRestrictionGates();
-  }
-  if (stage === 5) {
-    drawComparisonBars();
-  }
-}
-
-function drawOptimizationCore() {
-  const x = layoutPoints.stageX[3];
-  const y = layoutPoints.flowY;
-  const pulse = 58 + sin(frameCount * 0.08) * 6;
-  noFill();
-  stroke(PAN_BLUE);
-  strokeWeight(2);
-  circle(x, y, pulse * 2);
-  stroke(GREEN);
-  arc(x, y, pulse * 2.45, pulse * 2.45, frameCount * 0.025, frameCount * 0.025 + PI * 0.85);
-  stroke(RED);
-  arc(x, y, pulse * 1.75, pulse * 1.75, -frameCount * 0.03, -frameCount * 0.03 + PI * 0.7);
-  noStroke();
-  fill(INK);
-  textAlign(CENTER, CENTER);
-  textStyle(BOLD);
-  textSize(13);
-  text("max Z", x, y - 6);
-  textStyle(NORMAL);
-  textSize(11);
-  fill(MUTED);
-  text("retorno - perda", x, y + 13);
-}
-
-function drawRestrictionGates() {
-  const x = layoutPoints.stageX[4];
-  const y = layoutPoints.flowY - 132;
-  const gates = ["R$200", "R$25k", "CP x M", "PD fin."];
-  gates.forEach((gate, index) => {
-    const gy = y + index * 48;
-    stroke(index === 3 && getStats().financialDefault > riskBaseline ? RED : GREEN);
-    strokeWeight(2);
-    fill("#ffffff");
-    rect(x - 42, gy, 84, 30, 6);
-    noStroke();
-    fill(INK);
-    textAlign(CENTER, CENTER);
-    textSize(12);
-    text(gate, x, gy + 15);
-  });
-}
-
-function drawComparisonBars() {
-  const stats = getStats();
-  const x = layoutPoints.stageX[5] - 78;
-  const y = layoutPoints.flowY + 146;
-  const maxValue = max(stats.currentLimit, stats.optimizedLimit, 1);
-
-  drawSingleBar("Atual", x, y, stats.currentLimit / maxValue, "#94a3b8");
-  drawSingleBar("Otimizado", x + 106, y, stats.optimizedLimit / maxValue, PAN_BLUE);
-}
-
-function drawSingleBar(label, x, y, ratio, colorValue) {
-  const h = 82 * ratio;
-  noStroke();
-  fill("#e5e7eb");
-  rect(x, y - 82, 58, 82, 6);
-  fill(colorValue);
-  rect(x, y - h, 58, h, 6);
-  fill(INK);
-  textAlign(CENTER, TOP);
-  textSize(12);
-  text(label, x + 29, y + 8);
 }
 
 function getStageNote() {
@@ -462,6 +512,11 @@ function updateDomStatus() {
     stage === 5
       ? `Resultado: ${formatCurrency(stats.optimizedLimit)} ofertados, inad. financeira ${(stats.financialDefault * 100).toFixed(2).replace(".", ",")}%`
       : "Processando risco, retorno e capacidade de pagamento";
+
+  // Atualizar botoes de navegacao
+  document.getElementById("prev-button").disabled = stage === 0;
+  document.getElementById("next-button").disabled = stage === STAGE_LABELS.length - 1;
+  document.getElementById("step-indicator").textContent = `${stage + 1} / ${STAGE_LABELS.length}`;
 }
 
 function getMultiplier(pd) {
