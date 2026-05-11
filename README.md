@@ -8,7 +8,7 @@ A animacao representa o processamento em seis etapas: entrada da base, filtro de
 
 ## Rascunhos iniciais
 
-<img src="./rascunho.png" alt="Rascunho da esteira de otimizacao de limites" />
+<img src="./rascunho.jpeg" alt="Rascunho da esteira de otimizacao de limites" />
 
 A ideia inicial foi transformar o modelo matematico em uma esteira visual:
 
