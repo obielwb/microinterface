@@ -78,8 +78,6 @@ function wireControls() {
   const prevButton = document.getElementById("prev-button");
   const nextButton = document.getElementById("next-button");
   const resetButton = document.getElementById("reset-button");
-  const riskSlider = document.getElementById("risk-slider");
-  const usageSlider = document.getElementById("usage-slider");
 
   prevButton.addEventListener("click", () => {
     if (stage > 0) {
@@ -100,18 +98,6 @@ function wireControls() {
   resetButton.addEventListener("click", () => {
     stage = 0;
     rebuildSimulation();
-  });
-
-  riskSlider.addEventListener("input", (event) => {
-    riskBaseline = Number(event.target.value) / 100;
-    document.getElementById("risk-value").textContent = `${Number(event.target.value).toFixed(2).replace(".", ",")}%`;
-    rebuildSimulation(false);
-  });
-
-  usageSlider.addEventListener("input", (event) => {
-    usageRate = Number(event.target.value) / 100;
-    document.getElementById("usage-value").textContent = `${event.target.value}%`;
-    rebuildSimulation(false);
   });
 }
 
@@ -254,12 +240,24 @@ function setClientTargets() {
       });
     }
 
-    // Etapa 5 — Resultado: clientes ficam a esquerda dos graficos
+    // Etapa 5 — Resultado: agrupar clientes por categoria de risco
     if (client.eligible) {
-      const row = eligibleIndex % 6;
+      const riskCategory = client.pd <= 0.15 ? 0 : client.pd <= 0.25 ? 1 : 2;
+      const positions = [
+        { x: layoutPoints.stageX[5] - 40, y: layoutPoints.flowY - 70 }, // Baixo
+        { x: layoutPoints.stageX[5] + 30, y: layoutPoints.flowY - 10 },  // Médio
+        { x: layoutPoints.stageX[5] + 10, y: layoutPoints.flowY + 80 },  // Alto
+      ];
+      
+      const catClients = eligibleOnly.filter(c => (c.pd <= 0.15 ? 0 : c.pd <= 0.25 ? 1 : 2) === riskCategory);
+      const catIndex = catClients.indexOf(client);
+      
+      const angle = (catIndex / max(catClients.length, 1)) * TWO_PI;
+      const r = 25;
+
       targets.push({
-        x: layoutPoints.stageX[5] - 100,
-        y: layoutPoints.flowY - 80 + row * 32,
+        x: positions[riskCategory].x + cos(angle) * r,
+        y: positions[riskCategory].y + sin(angle) * r,
       });
     } else {
       targets.push({
@@ -341,7 +339,7 @@ function drawClients() {
 function drawStageVisuals() {
   if (stage === 3) drawOptimizationCore();
   if (stage === 4) drawRestrictionGates();
-  if (stage === 5) drawComparisonBars();
+  if (stage === 5) drawProfitOptimization();
 }
 
 function drawOptimizationCore() {
@@ -407,62 +405,28 @@ function drawRestrictionGates() {
   });
 }
 
-function drawComparisonBars() {
-  const stats = getStats();
-  const x = layoutPoints.stageX[5] - 38;
-  const y = layoutPoints.flowY + 90;
-  const maxValue = max(stats.currentLimit, stats.optimizedLimit, 1);
+function drawProfitOptimization() {
+  const x = layoutPoints.stageX[5];
+  const y = layoutPoints.flowY;
 
-  drawSingleBar("Atual", x - 38, y, stats.currentLimit / maxValue, "#94a3b8");
-  drawSingleBar("Otimizado", x + 38, y, stats.optimizedLimit / maxValue, PAN_BLUE);
-}
-
-function drawSingleBar(label, x, y, ratio, colorValue) {
-  const barH = 72;
-  const h = barH * ratio;
-  noStroke();
-  fill("#e5e7eb");
-  rect(x, y - barH, 52, barH, 6);
-  fill(colorValue);
-  rect(x, y - h, 52, h, 6);
-  fill(INK);
-  textAlign(CENTER, TOP);
-  textSize(11);
-  textStyle(BOLD);
-  text(label, x + 26, y + 6);
-  textStyle(NORMAL);
-}
-
-function drawPortfolioPanel() {
-  const stats = getStats();
-  const panelX = 38;
-  const panelY = height - 108;
-  const panelW = width - 76;
-  const panelH = 70;
-  fill("#f8fafc");
-  stroke(LINE);
-  strokeWeight(1);
-  rect(panelX, panelY, panelW, panelH, 8);
-
-  const items = [
-    ["Limite atual", formatCurrency(stats.currentLimit)],
-    ["Limite otimizado", formatCurrency(stats.optimizedLimit)],
-    ["Retorno esperado", formatCurrency(stats.returnTotal)],
-    ["Inad. financeira", `${(stats.financialDefault * 100).toFixed(2).replace(".", ",")}%`],
+  const positions = [
+    { x: x - 40, y: y - 70, label: "Baixo Risco\n+ Limite\n+ Lucro", color: GREEN },
+    { x: x + 30, y: y - 10, label: "Risco Médio\nLimite Seguro", color: AMBER },
+    { x: x + 10, y: y + 80, label: "Alto Risco\n- Limite\n- Perda", color: RED },
   ];
 
-  items.forEach((item, index) => {
-    const x = panelX + 24 + index * (panelW / 4);
-    noStroke();
+  positions.forEach(pos => {
+    noFill();
+    stroke(pos.color);
+    strokeWeight(1);
+    circle(pos.x, pos.y, 80);
+
     fill(MUTED);
-    textAlign(LEFT, TOP);
-    textSize(12);
-    text(item[0], x, panelY + 14);
-    fill(INK);
+    noStroke();
+    textAlign(CENTER, TOP);
+    textSize(10);
     textStyle(BOLD);
-    textSize(17);
-    text(item[1], x, panelY + 34);
-    textStyle(NORMAL);
+    text(pos.label, pos.x, pos.y + 45);
   });
 }
 
@@ -490,7 +454,7 @@ function getStageNote() {
     "Cada cliente entra em uma faixa de risco, que define o multiplicador maximo sobre a capacidade.",
     "O motor procura o limite que aumenta interchange esperado e reduz perda esperada.",
     "Os limites passam por minimo operacional, teto, capacidade x risco e baseline financeiro.",
-    `Carteira otimizada com ${formatCurrency(stats.optimizedLimit)} em limite e inadimplencia financeira de ${(stats.financialDefault * 100).toFixed(2).replace(".", ",")}%.`,
+    `Carteira otimizada em limites e inadimplencia financeira.`,
   ];
   return notes[stage];
 }
@@ -506,11 +470,10 @@ function getStats() {
 }
 
 function updateDomStatus() {
-  const stats = getStats();
   document.getElementById("stage-label").textContent = STAGE_LABELS[stage];
   document.getElementById("portfolio-score").textContent =
     stage === 5
-      ? `Resultado: ${formatCurrency(stats.optimizedLimit)} ofertados, inad. financeira ${(stats.financialDefault * 100).toFixed(2).replace(".", ",")}%`
+      ? `Carteira otimizada para maximização do lucro`
       : "Processando risco, retorno e capacidade de pagamento";
 
   // Atualizar botoes de navegacao

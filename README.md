@@ -8,6 +8,8 @@ A animacao representa o processamento em seis etapas: entrada da base, filtro de
 
 ## Rascunhos iniciais
 
+<img src="./rascunho.png" alt="Rascunho da esteira de otimizacao de limites" />
+
 A ideia inicial foi transformar o modelo matematico em uma esteira visual:
 
 1. Clientes entram como pontos com atributos.
@@ -23,10 +25,7 @@ O prototipo possui:
 
 - animacao demonstrativa do processamento;
 - clientes representados por cor de risco e tamanho de capacidade de pagamento;
-- barras individuais comparando limite atual e limite otimizado;
 - controles de simulacao para rodar, pausar e reiniciar;
-- sliders de apetite ao risco e uso esperado do limite;
-- indicadores consolidados de limite atual, limite otimizado, retorno esperado e inadimplencia financeira.
 
 ## Como executar
 
