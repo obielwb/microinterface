@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Esteira de Otimizacao de Limites</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace" aria-labelledby="page-title">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">Banco PAN / BTG Pactual</p>
+            <h1 id="page-title">Esteira de otimizacao de limites</h1>
+          </div>
+          <div class="status-strip" aria-live="polite">
+            <span id="stage-label">Pronto para simular</span>
+            <strong id="portfolio-score">Carteira aguardando processamento</strong>
+          </div>
+        </div>
+
+        <div class="layout">
+          <aside class="control-panel" aria-label="Controles da simulacao">
+            <div class="panel-section">
+              <h2>Simulacao</h2>
+              <button id="run-button" type="button">Rodar</button>
+              <button id="pause-button" type="button">Pausar</button>
+              <button id="reset-button" type="button">Reiniciar</button>
+            </div>
+
+            <div class="panel-section">
+              <label for="risk-slider">
+                Apetite ao risco
+                <span id="risk-value">5,53%</span>
+              </label>
+              <input id="risk-slider" type="range" min="4.4" max="7.2" value="5.53" step="0.01" />
+            </div>
+
+            <div class="panel-section">
+              <label for="usage-slider">
+                Uso esperado do limite
+                <span id="usage-value">75%</span>
+              </label>
+              <input id="usage-slider" type="range" min="70" max="80" value="75" step="1" />
+            </div>
+
+            <div class="panel-section compact">
+              <h2>Legenda</h2>
+              <div class="legend-row"><span class="dot green"></span>Baixo risco</div>
+              <div class="legend-row"><span class="dot amber"></span>Risco medio</div>
+              <div class="legend-row"><span class="dot red"></span>Alto risco</div>
+              <div class="legend-row"><span class="dot gray"></span>Perfil restrito</div>
+            </div>
+          </aside>
+
+          <section class="canvas-panel" aria-label="Animacao demonstrativa do processamento">
+            <div id="sketch-holder"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="sketch.js"></script>
+  </body>
+</html>
