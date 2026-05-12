@@ -21,6 +21,8 @@ A ideia inicial foi transformar o modelo matematico em uma esteira visual:
 
 ## Registro do resultado obtido
 
+<img src="./resultado.png" alt="Resultado da esteira de otimizacao de limites" />
+
 O prototipo possui:
 
 - animacao demonstrativa do processamento;
